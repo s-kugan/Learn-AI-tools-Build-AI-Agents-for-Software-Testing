@@ -1,0 +1,16 @@
+{
+  "name": "learn-ai-tools-build-ai-agents-for-software-testing",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
+    "@playwright/test": "^1.64.1",
+    "moment": "^2.31.0"
+  }
+}

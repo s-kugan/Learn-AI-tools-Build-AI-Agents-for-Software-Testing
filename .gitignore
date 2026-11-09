@@ -1,0 +1,20 @@
+# Secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+.claude/settings.local.json
+
+# Personal files
+Learn-AI-tools-Build-AI-Agents-for-Software-Testing.txt
+MY-SQL-Server-Installation-logs.txt
+LLM-MCP (AI Agent)/newly-registered.csv
+
+# Generated output
+node_modules/
+test-results/
+playwright-report/
+.playwright-mcp/
+frontend/.next/
+__MACOSX/
+.DS_Store
