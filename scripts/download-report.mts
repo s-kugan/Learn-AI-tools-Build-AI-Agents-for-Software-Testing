@@ -5,27 +5,46 @@
 //   npm run report:download -- <runId>   # report from a specific run
 //
 // Auth: uses GITHUB_TOKEN if set, otherwise the GitHub login saved in git's credential manager.
+//
+// Node runs this file directly (type stripping), so it uses only erasable TypeScript syntax.
 
-const { execFileSync } = require('node:child_process');
-const fs = require('node:fs');
-const path = require('node:path');
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const ARTIFACT_NAME = 'playwright-report';
-const ROOT = path.resolve(__dirname, '..');
-const REPORTS_DIR = path.join(ROOT, 'reports');
-
-function git(args, input) {
-  return execFileSync('git', args, { cwd: ROOT, input, encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }).trim();
+interface Artifact {
+  id: number;
+  expired: boolean;
+  created_at: string;
+  archive_download_url: string;
+  workflow_run: { id: number };
 }
 
-function getRepo() {
+interface ArtifactList {
+  artifacts: Artifact[];
+}
+
+const ARTIFACT_NAME = 'playwright-report';
+const ROOT = path.resolve(import.meta.dirname, '..');
+const REPORTS_DIR = path.join(ROOT, 'reports');
+
+function git(args: string[], input?: string): string {
+  return execFileSync('git', args, {
+    cwd: ROOT,
+    input,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  }).trim();
+}
+
+function getRepo(): string {
   const url = git(['remote', 'get-url', 'origin']);
   const match = url.match(/github\.com[:/]([^/]+\/[^/]+?)(\.git)?$/);
   if (!match) throw new Error(`Remote "origin" is not a GitHub repo: ${url}`);
   return match[1];
 }
 
-function getToken() {
+function getToken(): string {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
   const out = git(['credential', 'fill'], 'protocol=https\nhost=github.com\n\n');
   const line = out.split('\n').find((l) => l.startsWith('password='));
@@ -33,7 +52,7 @@ function getToken() {
   return line.slice('password='.length);
 }
 
-async function api(token, url) {
+async function api(token: string, url: string): Promise<Response> {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
   });
@@ -41,17 +60,21 @@ async function api(token, url) {
   return res;
 }
 
-function unzip(zipPath, destDir) {
+function unzip(zipPath: string, destDir: string): void {
   fs.mkdirSync(destDir, { recursive: true });
   if (process.platform === 'win32') {
-    execFileSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${destDir}' -Force`], { stdio: 'inherit' });
+    execFileSync(
+      'powershell',
+      ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${destDir}' -Force`],
+      { stdio: 'inherit' },
+    );
   } else {
     execFileSync('unzip', ['-oq', zipPath, '-d', destDir], { stdio: 'inherit' });
   }
 }
 
-async function main() {
-  const runId = process.argv[2];
+async function main(): Promise<void> {
+  const runId: string | undefined = process.argv[2];
   const repo = getRepo();
   const token = getToken();
   const base = `https://api.github.com/repos/${repo}`;
@@ -59,9 +82,13 @@ async function main() {
   const listUrl = runId
     ? `${base}/actions/runs/${runId}/artifacts?name=${ARTIFACT_NAME}`
     : `${base}/actions/artifacts?name=${ARTIFACT_NAME}&per_page=1`;
-  const { artifacts } = await (await api(token, listUrl)).json();
+  const { artifacts } = (await (await api(token, listUrl)).json()) as ArtifactList;
   const artifact = artifacts.find((a) => !a.expired);
-  if (!artifact) throw new Error(runId ? `No unexpired "${ARTIFACT_NAME}" artifact in run ${runId}.` : `No unexpired "${ARTIFACT_NAME}" artifact found.`);
+  if (!artifact) {
+    throw new Error(
+      runId ? `No unexpired "${ARTIFACT_NAME}" artifact in run ${runId}.` : `No unexpired "${ARTIFACT_NAME}" artifact found.`,
+    );
+  }
 
   const id = artifact.workflow_run.id;
   const destDir = path.join(REPORTS_DIR, `run-${id}`);
@@ -80,7 +107,7 @@ async function main() {
   console.log(`Open it with: npx playwright show-report ${rel}`);
 }
 
-main().catch((err) => {
-  console.error(err.message);
+main().catch((err: unknown) => {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });
