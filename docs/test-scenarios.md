@@ -1,10 +1,10 @@
-# EventHub Test Scenarios: Booking Management
+# EventHub Test Scenarios: Booking Management and Event Creation
 
 ## Scope
 
-**In scope:** everything that happens to a booking after it exists: list, detail, reference lookup, cancel, clear all, refund eligibility, FIFO pruning, seat release, and ownership.
+**In scope:** everything that happens to a booking after it exists: list, detail, reference lookup, cancel, clear all, refund eligibility, FIFO pruning, seat release, and ownership. Also in scope: creating user-owned events through the Admin UI and API, including validation, ownership, event limits, and UI states.
 
-**Out of scope:** booking form validation and the booking journey itself (Flow 3). Bookings are created only as setup, except where creation triggers a management rule such as FIFO pruning.
+**Out of scope:** booking form validation and the booking journey itself (Flow 3), and event editing/deletion apart from deletion caused by the documented event FIFO limit. Bookings are created only as setup, except where creation triggers a management rule such as FIFO pruning.
 
 ## Sources and confidence
 
@@ -14,7 +14,9 @@
 | `eventhub-domain` skill: `user-flows.md` | User flows | Flow n |
 | `eventhub-domain` skill: `api-reference.md` | Endpoints and error codes | API Ref |
 | `eventhub-domain` skill: `ui-selectors.md` | Which controls exist | UI Selectors |
-| Deployed API docs: `https://api.eventhub.rahulshettyacademy.com/api/docs/` | Booking contract | Swagger |
+| `backend/src/validators/eventValidator.js` and `backend/src/services/eventService.js` | Event input validation and creation behavior | File name and line |
+| `frontend/components/events/EventForm.jsx` and `frontend/app/admin/events/page.tsx` | Admin form and list behavior | File name and line |
+| Deployed API docs: `https://api.eventhub.rahulshettyacademy.com/api/docs/` | Event and booking contracts | Swagger |
 | `backend/` and `frontend/` source | Actual behaviour | File name and line |
 
 **Expected results come from the source code and documents, not from running the app.** The tests target the deployed site, which may differ from the local source.
@@ -38,6 +40,7 @@ The other questions are resolved. `docs/test-strategy.md` records the answers.
 - **Seat counts are per user.** `availableSeats` from `GET /events/:id` is calculated for the caller, so other users' normal bookings don't change it. Exact seat assertions are safe on either event type, but static counts may already be reduced by D-9, so compare before and after rather than against `totalSeats`.
 - **Fresh users:** clear all and FIFO pruning remove the account's bookings, so use a freshly registered user for each test. Don't use the shared test accounts for these.
 - **At most 6 events per user:** a 7th deletes the oldest event and its bookings.
+- **Event creation:** use a fresh registered account for deployed create tests because events persist and a seventh event deletes the oldest one. Mock the API for UI validation and error-state tests.
 - **Create bookings one at a time** when their order matters, because pruning order depends on `createdAt`.
 - **Customer email:** avoid Gmail addresses when asserting customer data, because `normalizeEmail()` rewrites them.
 - **Cross-user tests:** these need two separate users, A and B.
@@ -46,13 +49,13 @@ The other questions are resolved. `docs/test-strategy.md` records the answers.
 
 | Category | IDs | Count |
 |---|---|---|
-| Happy Path | TC-001 to TC-010 | 10 |
-| Business Rule | TC-100 to TC-119 | 20 |
-| Security | TC-200 to TC-215 | 16 |
-| Negative | TC-300 to TC-312 | 13 |
-| Edge Case | TC-400 to TC-414 | 15 |
-| UI State | TC-500 to TC-508 | 9 |
-| **Total** | | **83** |
+| Happy Path | TC-001 to TC-014 | 14 |
+| Business Rule | TC-100 to TC-123 | 24 |
+| Security | TC-200 to TC-220 | 21 |
+| Negative | TC-300 to TC-319 | 20 |
+| Edge Case | TC-400 to TC-417 | 18 |
+| UI State | TC-500 to TC-513 | 14 |
+| **Total** | | **111** |
 
 ---
 
@@ -994,4 +997,319 @@ The other questions are resolved. `docs/test-strategy.md` records the answers.
 3. On the list, click Clear all bookings and dismiss the native dialog.
 **Expected Results**: No delete request is sent, and all bookings stay visible.
 **Business Rule**: `app/bookings/page.tsx:28`; `ConfirmDialog.jsx:20`
+**Suggested Layer**: Component
+
+---
+
+## Event Creation
+
+### TC-011: Create an event from the Admin UI
+**Category**: Happy Path
+**Priority**: P0
+**Preconditions**: User is logged in and has fewer than 6 user-created events. The event API and admin event list are available.
+**Steps**:
+1. Open `/admin/events`.
+2. Fill in the required event fields with a future date, non-negative price, and positive whole-number seat count.
+3. Optionally enter a description and image URL.
+4. Click `#add-event-btn`.
+**Expected Results**: An "Event created!" toast appears, the form resets, and the new event appears in the user's event list with the submitted details and initial availability equal to total seats.
+**Business Rule**: Flow 5; BR §2, §3; UI Selectors (Admin Event Form)
+**Suggested Layer**: E2E
+
+### TC-012: Create an event through the API
+**Category**: Happy Path
+**Priority**: P1
+**Preconditions**: User has a valid token and fewer than 6 user-created events.
+**Steps**:
+1. Send `POST /api/events` with title, description, category, city, venue, future `eventDate`, price, and `totalSeats`.
+2. Read the created event using `GET /api/events/:id`.
+**Expected Results**: The POST returns 201 with the created event and a success message. The event has the submitted values, is user-owned and dynamic, and starts with `availableSeats === totalSeats`.
+**Business Rule**: API Ref; Flow 5; BR §2, §6; `eventController.js`, `eventService.js`
+**Suggested Layer**: API
+
+### TC-013: Create an event without optional fields
+**Category**: Happy Path
+**Priority**: P2
+**Preconditions**: User has a valid token and fewer than 6 user-created events.
+**Steps**:
+1. Send `POST /api/events` with all required fields but omit `description` and `imageUrl`.
+2. Read the created event.
+**Expected Results**: The event is created successfully with an empty description and a null image URL.
+**Business Rule**: API Ref (`CreateEventInput`); `eventService.js`
+**Suggested Layer**: API
+
+### TC-014: Create an event with each supported category
+**Category**: Happy Path
+**Priority**: P2
+**Preconditions**: User is logged in and has no user-created events.
+**Steps**:
+1. Open `/admin/events`.
+2. Inspect the Category control and create a valid event for each available option, using distinct future dates and titles.
+**Expected Results**: The UI offers Conference, Concert, Sports, Workshop, and Festival, and each selected category is saved on its event.
+**Business Rule**: Event model; Flow 5; `EventForm.jsx`
+**Suggested Layer**: Component
+
+### TC-120: The seventh event replaces only the oldest user-created event
+**Category**: Business Rule
+**Priority**: P1
+**Preconditions**: User has exactly 6 user-created events, created sequentially, and at least one shared static event exists.
+**Steps**:
+1. Record the six dynamic event IDs and the oldest event.
+2. Create one more valid event.
+3. List the user's events and shared static events.
+**Expected Results**: The new event exists, the oldest dynamic event is gone, exactly 6 dynamic events remain, and static events are unchanged.
+**Business Rule**: BR §3; `eventService.js` (FIFO limit)
+**Suggested Layer**: API
+
+### TC-121: Creating the sixth event does not prune an event
+**Category**: Business Rule
+**Priority**: P2
+**Preconditions**: User has exactly 5 user-created events.
+**Steps**:
+1. Record the 5 existing event IDs.
+2. Create a sixth valid event.
+**Expected Results**: All 6 events remain; no event is pruned before the account reaches the limit.
+**Business Rule**: BR §3 (maximum of 6 user-created events)
+**Suggested Layer**: API
+
+### TC-122: Creating an event initializes its full seat inventory
+**Category**: Business Rule
+**Priority**: P1
+**Preconditions**: User has room under the event limit and a valid token.
+**Steps**:
+1. Create an event with a known `totalSeats` value.
+2. Fetch it using `GET /api/events/:id`.
+**Expected Results**: `totalSeats` and initial `availableSeats` both equal the submitted seat count.
+**Business Rule**: BR §6; `eventService.js`
+**Suggested Layer**: API
+
+### TC-123: Required text fields are trimmed before saving
+**Category**: Business Rule
+**Priority**: P2
+**Preconditions**: User has a valid token and room under the event limit.
+**Steps**:
+1. Create an event with leading and trailing spaces around its title, category, venue, and city.
+2. Fetch the event.
+**Expected Results**: The event is created and each submitted text value is stored without the surrounding spaces.
+**Business Rule**: `eventValidator.js` (trimmed required fields)
+**Suggested Layer**: API
+
+### TC-216: Event creation requires authentication
+**Category**: Security
+**Priority**: P0
+**Preconditions**: No bearer token is supplied.
+**Steps**:
+1. Send `POST /api/events` with an otherwise valid event body and no token.
+2. Repeat with a malformed or expired token.
+**Expected Results**: Both requests return 401 and no event is created.
+**Business Rule**: API Ref (Bearer Token Required); `eventRoutes.js`, `authMiddleware.js`
+**Suggested Layer**: API
+
+### TC-217: Client cannot set ownership or server-controlled event fields
+**Category**: Security
+**Priority**: P1
+**Preconditions**: User A has a valid token; User B is a different account.
+**Steps**:
+1. As User A, send a valid create request with extra `userId`, `isStatic`, and `availableSeats` fields set to User B, `true`, and `0`.
+2. Fetch the event as User A and as User B.
+**Expected Results**: The event is owned by User A, remains dynamic, and starts with availability equal to total seats. User B cannot fetch the event.
+**Business Rule**: BR §2, §6; `eventService.js` (creation payload is server-controlled)
+**Suggested Layer**: API
+
+### TC-218: A user cannot read another user's dynamic event
+**Category**: Security
+**Priority**: P1
+**Preconditions**: User A owns a dynamic event; User B has a separate valid token.
+**Steps**:
+1. As User B, request User A's event by ID.
+2. As User B, list events and search for User A's unique event title.
+**Expected Results**: The direct read returns 404, and neither list nor search returns User A's event.
+**Business Rule**: BR §2; `eventRepository.js` (ownership filter)
+**Suggested Layer**: API
+
+### TC-219: Event text is rendered as text, not executable markup
+**Category**: Security
+**Priority**: P1
+**Preconditions**: User is logged in; create and list APIs are mocked with an event whose title or description contains harmless HTML markup such as `<b>Sample</b>`.
+**Steps**:
+1. Create the event through the form.
+2. Inspect the event row and any event card that displays its title or description.
+**Expected Results**: Markup is displayed as literal text or safely encoded; no injected element is created and no script runs.
+**Business Rule**: User-supplied event fields; React rendering behavior
+**Suggested Layer**: Component
+
+### TC-220: One user's event limit does not affect another user's events
+**Category**: Security
+**Priority**: P2
+**Preconditions**: Users A and B each own at least one dynamic event.
+**Steps**:
+1. Create events as User A until A reaches 6, then create one more.
+2. List events as User B.
+**Expected Results**: Only User A's oldest event is replaced. User B's dynamic events remain unchanged and visible only to User B.
+**Business Rule**: BR §2, §3; `eventRepository.js`
+**Suggested Layer**: API
+
+### TC-313: Missing or blank required event fields are rejected
+**Category**: Negative
+**Priority**: P1
+**Preconditions**: User has a valid token.
+**Steps**:
+1. Send `POST /api/events` with the required fields omitted.
+2. Repeat with whitespace-only title, category, venue, and city values.
+**Expected Results**: Each request returns 400 with `error: "Validation failed"` and field-specific details. No event is created.
+**Business Rule**: API Ref (missing required fields); `eventValidator.js`
+**Suggested Layer**: API
+
+### TC-314: Invalid, past, and non-future event dates are rejected
+**Category**: Negative
+**Priority**: P1
+**Preconditions**: User has a valid token.
+**Steps**:
+1. Submit otherwise valid requests with a malformed date, a past date, and a date equal to the current time.
+**Expected Results**: Each request returns 400 with a date validation error, and no event is created.
+**Business Rule**: BR (event date must be in the future); API Ref; `eventValidator.js`
+**Suggested Layer**: API
+
+### TC-315: Invalid prices and seat counts are rejected
+**Category**: Negative
+**Priority**: P1
+**Preconditions**: User has a valid token.
+**Steps**:
+1. Send separate valid-shape requests with a negative or non-numeric price.
+2. Send requests with zero, negative, non-integer, or non-numeric `totalSeats`.
+**Expected Results**: Each request returns 400 with a field-specific validation detail; no invalid event is created.
+**Business Rule**: BR (price >= 0; total seats >= 1); API Ref; `eventValidator.js`
+**Suggested Layer**: API
+
+### TC-316: Invalid optional image URLs are rejected
+**Category**: Negative
+**Priority**: P2
+**Preconditions**: User has a valid token and room under the event limit.
+**Steps**:
+1. Submit an otherwise valid event with a malformed non-empty `imageUrl`.
+2. Submit again with the optional URL omitted or empty.
+**Expected Results**: The malformed URL returns 400 with an image URL validation detail. Omitted or empty URL is accepted and saved as null.
+**Business Rule**: `eventValidator.js` (`imageUrl` is optional but must be a URL when supplied)
+**Suggested Layer**: API
+
+### TC-317: Admin form blocks invalid required fields before submitting
+**Category**: Negative
+**Priority**: P1
+**Preconditions**: User is logged in and the create API is mocked.
+**Steps**:
+1. Open `/admin/events` and submit the empty form.
+2. Enter a past date, negative price, and zero seats; submit again.
+**Expected Results**: Inline field errors identify the invalid values, no create request is sent, and the form remains available for correction.
+**Business Rule**: `EventForm.jsx` (client-side validation)
+**Suggested Layer**: Component
+
+### TC-318: Fractional seat count is not silently truncated by the Admin form
+**Category**: Negative
+**Priority**: P1
+**Preconditions**: User is logged in; create API is mocked and request payloads are recorded.
+**Steps**:
+1. Fill all required fields with valid values but enter a fractional seat count such as `1.5`.
+2. Submit the form.
+**Expected Results**: The form displays an integer-seat validation error and sends no create request. **Known issue:** `EventForm.jsx` checks only that the seat count is at least 1, then applies `parseInt`, so `1.5` can be submitted as 1.
+**Business Rule**: BR (total seats >= 1; Event model uses an integer); `EventForm.jsx`, `eventValidator.js`
+**Suggested Layer**: Component
+
+### TC-319: Failed event creation is reported without clearing entered data
+**Category**: Negative
+**Priority**: P2
+**Preconditions**: User is logged in and the create API is mocked to return a validation or server error.
+**Steps**:
+1. Fill a valid event form and submit.
+2. Inspect the toast and form values after the API fails.
+**Expected Results**: An error toast displays the API error, no success toast appears, and entered values remain available to correct and resubmit.
+**Business Rule**: `EventForm.jsx` (mutation error handling)
+**Suggested Layer**: Component
+
+### TC-415: Zero price and the minimum seat count are accepted
+**Category**: Edge Case
+**Priority**: P1
+**Preconditions**: User has a valid token and room under the event limit.
+**Steps**:
+1. Create an event with price `0` and `totalSeats` `1`.
+2. Fetch the created event.
+**Expected Results**: The event is created with price zero, one total seat, and one available seat.
+**Business Rule**: BR (price >= 0; total seats >= 1); `eventValidator.js`
+**Suggested Layer**: API
+
+### TC-416: Event limit counts only the caller's dynamic events
+**Category**: Edge Case
+**Priority**: P2
+**Preconditions**: User has 5 dynamic events and there are at least 2 shared static events.
+**Steps**:
+1. Create one more event.
+2. Record the user's dynamic and static event IDs.
+3. Create a seventh dynamic event.
+**Expected Results**: The sixth dynamic event does not prune anything; the seventh replaces the oldest dynamic event. Static events are never counted or pruned.
+**Business Rule**: BR §3; `eventService.js`
+**Suggested Layer**: API
+
+### TC-417: Concurrent event creation preserves the six-event limit
+**Category**: Edge Case
+**Priority**: P2
+**Preconditions**: User has 5 dynamic events; two valid create requests can be sent concurrently.
+**Steps**:
+1. Send two valid `POST /api/events` requests at the same time.
+2. List the user's dynamic events.
+**Expected Results**: The account has no more than 6 dynamic events and the oldest excess event is removed. **Known issue:** the current count, oldest-event lookup, delete, and create operations are not transactional, so concurrent requests may exceed the limit.
+**Business Rule**: BR §3; `eventService.js` (FIFO sequence)
+**Suggested Layer**: API
+
+### TC-509: Admin event list distinguishes loading, empty, and populated states
+**Category**: UI State
+**Priority**: P2
+**Preconditions**: User is logged in. List responses can be delayed and mocked as empty or populated.
+**Steps**:
+1. Open `/admin/events` while the list request is delayed.
+2. Resolve it with an empty list, then repeat with one event.
+**Expected Results**: A spinner appears while loading, the empty state says "No events yet" only after an empty response, and the table appears for a populated response.
+**Business Rule**: Flow 5; `app/admin/events/page.tsx`
+**Suggested Layer**: Component
+
+### TC-510: Successful creation refreshes the list and resets the form
+**Category**: UI State
+**Priority**: P1
+**Preconditions**: User is logged in, has fewer than 6 dynamic events, and the event API is mocked to create successfully.
+**Steps**:
+1. Fill and submit a valid event form.
+2. Resolve the create request successfully and inspect the form and event list.
+**Expected Results**: The success toast appears, the form resets to its empty defaults, and the event query refreshes so the new event is shown.
+**Business Rule**: Flow 5; `EventForm.jsx`, `useEvents.ts`
+**Suggested Layer**: Component
+
+### TC-511: Submitting while creation is pending does not create duplicates
+**Category**: UI State
+**Priority**: P2
+**Preconditions**: User is logged in and the create API is mocked with a delayed response.
+**Steps**:
+1. Submit a valid event form.
+2. While the request is pending, attempt to submit again.
+**Expected Results**: The submit button indicates a pending state and only one create request is sent.
+**Business Rule**: Flow 5; `EventForm.jsx` (pending mutation state)
+**Suggested Layer**: Component
+
+### TC-512: Event list load failure is not presented as an empty account
+**Category**: UI State
+**Priority**: P2
+**Preconditions**: User is logged in and the event list API is mocked to fail.
+**Steps**:
+1. Open `/admin/events`.
+**Expected Results**: The page shows an explicit load error or retry option, not the "No events yet" empty state. **Known issue:** `page.tsx` only distinguishes loading from an empty `data` array, so a failed load can be presented as an empty account.
+**Business Rule**: Flow 5; `app/admin/events/page.tsx`
+**Suggested Layer**: Component
+
+### TC-513: Admin form remains usable when event creation fails
+**Category**: UI State
+**Priority**: P2
+**Preconditions**: User is logged in and the create API is mocked to fail after submission.
+**Steps**:
+1. Fill and submit a valid event form.
+2. Resolve the request with an error.
+3. Correct one field and submit again.
+**Expected Results**: The pending state ends, the error is surfaced, the form values remain, and the user can retry without reloading the page.
+**Business Rule**: Flow 5; `EventForm.jsx`
 **Suggested Layer**: Component
