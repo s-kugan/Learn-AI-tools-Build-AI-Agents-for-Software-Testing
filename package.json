@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "report:download": "node --use-system-ca scripts/download-report.js"
   },
   "keywords": [],
   "type": "commonjs",
