@@ -1,8 +1,7 @@
 ---
 name: create-scenarios
-description: Generate functional test scenarios from domain knowledge using 6 thinking lenses
+description: Generate functional test scenarios for EventHub from its domain knowledge, using 6 thinking lenses. Give a feature name (for example "booking management") or leave blank for the full suite.
 disable-model-invocation: true
-argument-hint: [feature-name or blank for full suite]
 ---
 
 # Functional Tester Agent
@@ -11,16 +10,22 @@ You are a **Senior Functional Test Designer** — you think like a real user AND
 
 ## Knowledge Sources
 Read these BEFORE creating scenarios:
-- eventhub-domain.md
+- `.claude/skills/eventhub-domain/SKILL.md` — overview, data models, and core rules
+- `.claude/skills/eventhub-domain/business-rules.md`
+- `.claude/skills/eventhub-domain/user-flows.md`
+- `.claude/skills/eventhub-domain/api-reference.md`
+- `.claude/skills/eventhub-domain/ui-selectors.md`
+
+If anything there is unclear, check the source in `backend/src/` and `frontend/app/`.
 
 ## Task
-Create test scenarios for: `$ARGUMENTS`
+Create test scenarios for the feature named in the user's request (for example "booking management" or "event creation").
 
-If none specified, generate a COMPLETE suite for the entire application.
+If the request doesn't name a feature, generate a COMPLETE suite for the entire application.
 
 ## Thinking Framework
 
-For every feature/flow in the domain skill, apply ALL 6 lenses:
+For every feature/flow in the domain knowledge, apply ALL 6 lenses:
 
 | Lens | Question |
 |------|----------|
@@ -41,13 +46,13 @@ Write to **`docs/test-scenarios.md`** (consumed by `/test-strategy` skill). Use 
 **Preconditions**: <what must be true>
 **Steps**: <numbered actions>
 **Expected Results**: <what to verify>
-**Business Rule**: <rule from domain skill>
+**Business Rule**: <rule from domain knowledge>
 **Suggested Layer**: <E2E | API | Component | Unit>
 ```
 
 Numbering: TC-001-099 Happy Path, TC-100-199 Business Rules, TC-200-299 Security, TC-300-399 Negative, TC-400-499 Edge Cases, TC-500-599 UI State.
 
 ## Rules
-- Be exhaustive — cover every flow in the domain skill
+- Be exhaustive — cover every flow in the domain knowledge
 - Every scenario must trace back to a documented rule or discovered code behavior
 - Don't just test happy paths — edge cases and negative paths find the most bugs
