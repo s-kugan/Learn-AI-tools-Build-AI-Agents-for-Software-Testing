@@ -1,6 +1,6 @@
 # EventHub Test Strategy: Booking Management
 
-**Input:** the 83 scenarios in `docs/test-scenarios.md`.
+**Input:** the original 83 booking-management scenarios in `docs/test-scenarios.md`. The 28 event-creation scenarios appended under "Event Creation" are not included in this strategy's layer allocation or test-file mapping.
 
 ## Summary
 
