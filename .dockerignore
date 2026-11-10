@@ -1,0 +1,29 @@
+# Dependencies are installed inside the image
+node_modules/
+
+# Not needed to run the tests
+.git/
+.github/
+.claude/
+.vscode/
+frontend/
+backend/
+docs/
+review/
+reports/
+LLM-MCP (AI Agent)/
+*.docx
+*.md
+!README.md
+
+# Generated output
+playwright-report/
+test-results/
+.playwright-mcp/
+__MACOSX/
+
+# Secrets and personal files
+.env
+.env.*
+Learn-AI-tools-Build-AI-Agents-for-Software-Testing.txt
+MY-SQL-Server-Installation-logs.txt

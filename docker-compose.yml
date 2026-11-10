@@ -1,0 +1,12 @@
+services:
+  tests:
+    build: .
+    image: eventhub-playwright-tests
+    # Recommended by Playwright for Chromium: avoids out-of-memory crashes
+    # from the small default /dev/shm, and reaps zombie browser processes.
+    ipc: host
+    init: true
+    # Reports and traces are written back to the host so you can open them.
+    volumes:
+      - ./playwright-report:/app/playwright-report
+      - ./test-results:/app/test-results
